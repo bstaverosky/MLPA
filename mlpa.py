@@ -18,18 +18,14 @@ import talib as talib
 from sklearn.ensemble import GradientBoostingRegressor
 import pyfolio as pf
 from datetime import datetime
+import uuid
 
 
-
-# Verify the versions of the loaded libraries (optional)
-print("NumPy version:", np.__version__)
-print("pandas version:", pd.__version__)
-print("scikit-learn version:", sklearn.__version__)
-#print("matplotlib version:", plt.__version__)
-print("seaborn version:", sns.__version__)
-print("yfinance version:", yf.__version__)
-#print("cvxpy version:", cp.__version__)
-print("statsmodels version:", sm.__version__)
+# Load Adaptive Leverage Model as Benchmark
+adaptivelev = pd.read_csv("/home/bstaverosky/Documents/projects/adaptive_leverage/asset_output.csv")
+adaptivelev.set_index('Index', inplace=True)
+alev_strat = adaptivelev.loc[:, "strat"]
+alev_model = adaptivelev.loc[:, ["score"]]
 
 # Load SPY
 ticker = "^GSPC"
@@ -84,8 +80,9 @@ merged_df = merged_df.fillna(method = "ffill")
 asset = merged_df
 
 ##### PARAMETERS #####
-algos = ["xg"]
+expanding_window = False
 
+algos = ["xg"]
 numest = [5]
 nest = 10
 maxdepth = [5]
@@ -103,8 +100,9 @@ alg = "xg"
 #for pw in predwindow:
 #    for nest in numest:
 #        for mdepth in maxdepth:
+    
+            backtest_id = str(uuid.uuid4())
             
-           
             pw = 21
             lw = 2560
             
@@ -142,11 +140,9 @@ alg = "xg"
     
             
             # CLEAN DATAFRAME
-            
             #df = asset[['sma_rat', 'vol_rat', 'p2h', 'infl', 'ey', 'dy', 'aaa', 'tr', 'pb','ts', 'pwret']].tail(len(asset)-lw)
             df = asset[['sma_rat', 'vol_rat', 'p2h', 'infl', 'ey', 'dy', 'ts', 'pwret']].tail(len(asset)-lw)
             df = df.dropna()
-            #df = df.dropna()
             #features = ['sma_rat', 'vol_rat', 'p2h', 'infl', 'ey', 'dy', 'aaa', 'tr', 'pb','ts']
             features = ['sma_rat', 'vol_rat', 'p2h', 'infl', 'ey', 'dy', 'ts']
             
@@ -206,8 +202,8 @@ alg = "xg"
             pf.create_simple_tear_sheet(returns = strat_series, benchmark_rets=bmk_series)
             
             # Real-time forward week prediction
-            rtpred = asset.loc[[asset.index[len(asset)-1]], ['sma_rat', 'vol_rat', 'p2h']]
-            model.predict(rtpred)
+            #rtpred = asset.loc[[asset.index[len(asset)-1]], ['sma_rat', 'vol_rat', 'p2h']]
+            #model.predict(rtpred)
             sframe = sframe.dropna()
             # Evaluate the test set RMSE
             #MSE(sframe.loc[:,"pwret"], sframe.loc[:,"signal"])**(1/2)
@@ -216,6 +212,7 @@ alg = "xg"
             # Performance Data Frame
             perf = pd.DataFrame({
                 'Date Run': datetime.today().strftime('%Y-%m-%d'),
+                'Backtest_id':backtest_id
                 'Ticker': ticker,
                 'algo': alg,
                 'Prediction Window': [pw],
@@ -236,11 +233,21 @@ alg = "xg"
                 #'Skill': accuracy_score(sframe.loc[:,"pwret_bin"], sframe.loc[:,"signal_bin"])-(sframe.loc[:,"pwret_bin"] == 1).sum()/len(sframe)
             })
 
-            # Save to CSV
-            #if path.exists('/home/brian/Documents/projects/shared_projects/Data' + "/" + "adhoc" + "_model_rolling_strat.csv") == True:
-             #   perf.to_csv('/home/brian/Documents/projects/shared_projects/Data' + "/" + "adhoc" + "_model_rolling_strat.csv", mode = 'a', header = False)
-            #elif path.exists('/home/brian/Documents/projects/shared_projects/Data' + "/" + "adhoc" + "_model_rolling_strat.csv") == False:
-             #   perf.to_csv('/home/brian/Documents/projects/shared_projects/Data' + "/" + "adhoc" + "_model_rolling_strat.csv", header = True)
+            # Save Summary Statistics to CSV
+            if path.exists('/home/brian/Documents/projects/MLPA/Summary' + "/" + "MLPA_backtest_summary.csv") == True:
+                perf.to_csv('/home/brian/Documents/projects/shared_projects/Data' + "/" + "MLPA_backtest_summary.csv", mode = 'a', header = False)
+            elif path.exists('/home/brian/Documents/projects/shared_projects/Data' + "/" + "MLPA_backtest_summary.csv") == False:
+                perf.to_csv('/home/brian/Documents/projects/shared_projects/Data' + "/" + "MLPA_backtest_summary.csv", header = True)
+            
+            # Save models
+            if path.exists('/home/brian/Documents/projects/MLPA/Summary' + "/" + "MLPA_backtest_summary.csv") == True:
+                perf.to_csv('/home/brian/Documents/projects/shared_projects/Data' + "/" + "MLPA_backtest_summary.csv", mode = 'a', header = False)
+            elif path.exists('/home/brian/Documents/projects/shared_projects/Data' + "/" + "MLPA_backtest_summary.csv") == False:
+                perf.to_csv('/home/brian/Documents/projects/shared_projects/Data' + "/" + "MLPA_backtest_summary.csv", header = True)
+                
+            
+                
+            
 
 
     
