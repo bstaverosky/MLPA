@@ -16,13 +16,10 @@ import yfinance as yf
 import statsmodels.api as sm
 import talib as talib
 from sklearn.ensemble import GradientBoostingRegressor
-from sklearn.metrics import mean_squared_error as MSE
 import pyfolio as pf
 from datetime import datetime
 import uuid
 import pickle
-import empyrical as ep
-from os import path
 
 
 # Load Adaptive Leverage Model as Benchmark
@@ -125,7 +122,7 @@ alg = "xg"
             # one additional day to fix look ahead bias
             asset['pwret'] = asset['pwret'].shift(-(pw+1))
     
-    
+            if expanding_window = True:
                 
     
             # CLEAN DATAFRAME
@@ -137,10 +134,9 @@ alg = "xg"
             
             predf = pd.DataFrame(columns = ["pred"])
             
-            # Create rolling/expanding window trainset
+            # Create rolling window trainset
             for i in range((lw+pw), len(df.index)-1):
                 print(i)
-                print(lw)
                 
                 if alg == "xg":
                     model = GradientBoostingRegressor(n_estimators = nest,
@@ -167,10 +163,7 @@ alg = "xg"
                 lframe = pd.DataFrame(y_pred, columns = ["pred"], index = ytest.index)
                 predf = predf.append(lframe)
                 
-                if expanding_window == True: 
-                    lw = lw + 1
-                
-            
+
                 
             # Put predictions back on original data frame
             # And convert y_pred so it can be added to dataframe
@@ -178,7 +171,6 @@ alg = "xg"
             # And convert y_pred so it can be added to dataframe
             
             sframe = df
-            predf = predf[~predf.index.duplicated()]
             sframe['signal'] = predf
             sframe['signal'] = sframe['signal'].shift(1)
             sframe['return'] = asset['dayret']
@@ -186,15 +178,15 @@ alg = "xg"
             # Create the strategy return performance
             for i in range(len(sframe.index)):
                 if sframe.loc[sframe.index[i], "signal"] > 0:
-                    sframe.loc[sframe.index[i], "strat"] = sframe.loc[sframe.index[i], "return"]*1
+                    sframe.loc[sframe.index[i], "strat"] = sframe.loc[sframe.index[i], "return"]*0.75
                 else:
-                    sframe.loc[sframe.index[i], "strat"] = sframe.loc[sframe.index[i], "return"]*0
+                    sframe.loc[sframe.index[i], "strat"] = sframe.loc[sframe.index[i], "return"]*-0.10
                     
             bmk_series = sframe.loc[:,"return"].tail(len(sframe)-(lw+pw))
             strat_series = sframe.loc[:,"strat"].tail(len(sframe)-(lw+pw))
             
             #tsheet = pf.create_simple_tear_sheet(returns = strat_series, benchmark_rets=bmk_series)
-
+            
             pf.create_simple_tear_sheet(returns = strat_series, benchmark_rets=bmk_series)
             
             # Real-time forward week prediction
@@ -208,7 +200,7 @@ alg = "xg"
             # Performance Data Frame
             perf = pd.DataFrame({
                 'Date Run': datetime.today().strftime('%Y-%m-%d'),
-                'Backtest_id':backtest_id,
+                'Backtest_id':backtest_id
                 'Ticker': ticker,
                 'algo': alg,
                 'Prediction Window': [pw],
@@ -231,9 +223,9 @@ alg = "xg"
 
             # Save Summary Statistics to CSV
             if path.exists('/home/brian/Documents/projects/MLPA/Summary' + "/" + "MLPA_backtest_summary.csv") == True:
-                perf.to_csv('/home/brian/Documents/projects/MLPA/Summary' + "/" + "MLPA_backtest_summary.csv", mode = 'a', header = False)
-            elif path.exists('/home/brian/Documents/projects/MLPA/Summary' + "/" + "MLPA_backtest_summary.csv") == False:
-                perf.to_csv('/home/brian/Documents/projects/MLPA/Summary' + "/" + "MLPA_backtest_summary.csv", header = True)
+                perf.to_csv('/home/brian/Documents/projects/shared_projects/Data' + "/" + "MLPA_backtest_summary.csv", mode = 'a', header = False)
+            elif path.exists('/home/brian/Documents/projects/shared_projects/Data' + "/" + "MLPA_backtest_summary.csv") == False:
+                perf.to_csv('/home/brian/Documents/projects/shared_projects/Data' + "/" + "MLPA_backtest_summary.csv", header = True)
              
             # Save last relevant model 
             with open("/home/bstaverosky/Documents/projects/MLPA/models/" + backtest_id + datetime.today().strftime('%Y-%m-%d') + "model.pkl", 'wb') as file:
