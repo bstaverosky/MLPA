@@ -7,6 +7,9 @@ Created on Sat May 27 16:08:29 2023
 """
 
 import numpy as np
+import matplotlib
+import os
+import matplotlib.pyplot as plt
 import pandas as pd
 import sklearn
 #import matplotlib.pyplot as plt
@@ -16,6 +19,7 @@ import yfinance as yf
 import statsmodels.api as sm
 import talib as talib
 from sklearn.ensemble import GradientBoostingRegressor
+from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_squared_error as MSE
 import pyfolio as pf
 from datetime import datetime
@@ -50,7 +54,7 @@ for i in range(len(asset.index)):
     asset.loc[asset.index[i], "p2h"] = asset.loc[asset.index[i], "Close"]/np.max(asset.loc[asset.index[(i-252):(i-1)], "Close"])
 
 # Load macroeconomic variables from disk
-s
+
 # Read the CSV files and set the "Date" column as the index while converting to daily frequency
 data_files = [
     ("/home/bstaverosky/Documents/projects/MLPA/infl.csv", "infl"),
@@ -85,168 +89,166 @@ merged_df = merged_df.fillna(method = "ffill")
 asset = merged_df
 
 ##### PARAMETERS #####
-expanding_window = False
-
-algos = ["xg"]
-numest = [5]
-nest = 10
-maxdepth = [5]
-mdepth = 5
+#expanding_window = [True, False]
+ew = False
+algos = ["xg","linreg"]
+numest = [2,3,5,10]
+#nest = 10
+maxdepth = [1,2,3,5]
+#mdepth = 5
 #prediction window
-predwindow = [21]
+predwindow = [3,5,10,21,63,126,256]
 #pw = 10
 #lookback window
-lw = 2560
+lookbacks = [256, 512, 768, 1280, 1920, 2560, 3840, 5120, 6400]
+#lw = 2560
 # ticker
 #ticker = "SPY"
-alg = "xg"
+#alg = "xg"
+for pw in predwindow:
+    for nest in numest:
+        for mdepth in maxdepth:
+            for lw in lookbacks:
+                for alg in algos:
 
-
-#for pw in predwindow:
-#    for nest in numest:
-#        for mdepth in maxdepth:
-    
-            backtest_id = str(uuid.uuid4())
-            
-            pw = 21
-            lw = 2560
-            
-            # Get Daily Return
-            asset['dayret'] = asset['Close'].pct_change()
-            
-            # Get Weekly Return
-            #test = asset.resample('W').ffill()
-            asset['closelag'] = asset['Close'].shift(pw)
-            def percentage_change(col1,col2):
-                return ((col2 - col1) / col1) * 100
-            
-            asset['pwret'] = percentage_change(asset['closelag'],asset['Close'])
-            # Shift so that your prediction period aligns with the current day plus
-            # one additional day to fix look ahead bias
-            asset['pwret'] = asset['pwret'].shift(-(pw+1))
-    
-    
+                        print(pw)
+                        print(nest)
+                        print(mdepth)
+                        print(lw)
+                        print(alg)
+                        print(ew)
+                        
+                        backtest_id = str(uuid.uuid4())
+                                                
+                        # Get Daily Return
+                        asset['dayret'] = asset['Close'].pct_change()
+                        
+                        # Get Weekly Return
+                        #test = asset.resample('W').ffill()
+                        asset['closelag'] = asset['Close'].shift(pw)
+                        def percentage_change(col1,col2):
+                            return ((col2 - col1) / col1) * 100
+                        
+                        asset['pwret'] = percentage_change(asset['closelag'],asset['Close'])
+                        # Shift so that your prediction period aligns with the current day plus
+                        # one additional day to fix look ahead bias
+                        asset['pwret'] = asset['pwret'].shift(-(pw+1))
                 
-    
-            # CLEAN DATAFRAME
-            #df = asset[['sma_rat', 'vol_rat', 'p2h', 'infl', 'ey', 'dy', 'aaa', 'tr', 'pb','ts', 'pwret']].tail(len(asset)-lw)
-            df = asset[['sma_rat', 'vol_rat', 'p2h', 'infl', 'ey', 'dy', 'ts', 'pwret']].tail(len(asset)-lw)
-            df = df.dropna()
-            #features = ['sma_rat', 'vol_rat', 'p2h', 'infl', 'ey', 'dy', 'aaa', 'tr', 'pb','ts']
-            features = ['sma_rat', 'vol_rat', 'p2h', 'infl', 'ey', 'dy', 'ts']
+                        # CLEAN DATAFRAME
+                        #df = asset[['sma_rat', 'vol_rat', 'p2h', 'infl', 'ey', 'dy', 'aaa', 'tr', 'pb','ts', 'pwret']].tail(len(asset)-lw)
+                        df = asset[['sma_rat', 'vol_rat', 'p2h', 'infl', 'ey', 'dy', 'ts', 'pwret']].tail(len(asset)-lw)
+                        df = df.dropna()
+                        #features = ['sma_rat', 'vol_rat', 'p2h', 'infl', 'ey', 'dy', 'aaa', 'tr', 'pb','ts']
+                        features = ['sma_rat', 'vol_rat', 'p2h', 'infl', 'ey', 'dy', 'ts']
+                        
+                        predf = pd.DataFrame(columns = ["pred"])
+                        
+                        # Create rolling/expanding window trainset
+                        for i in range((lw+pw), len(df.index)-1):
+                            print(i)
+                            print(lw)
+                            
+                            if alg == "xg":
+                                model = GradientBoostingRegressor(n_estimators = nest,
+                                                                  max_depth=mdepth,
+                                                                  random_state=2)
+                            elif alg == "linreg":
+                                print("linreg")
+                                model = LinearRegression()
+                            
+                            # Make trainsets
+                            xtrain = df.loc[df.index[i-(lw+pw)]:df.index[i-pw],features]
+                            ytrain = df.loc[df.index[i-(lw+pw)]:df.index[i-pw],['pwret']]
+                                
+                            # Make testsets
+                            xtest = df.loc[[df.index[i+1]],features]    
+                            ytest = df.loc[[df.index[i+1]],['pwret']]
+                            type(ytest)
+                                
+                            model.fit(xtrain, ytrain)
+                            y_pred = model.predict(xtest)
+                                
+                            #results = pd.DataFrame(data = )
+                                
+                            lframe = pd.DataFrame(y_pred, columns = ["pred"], index = ytest.index)
+                            predf = predf.append(lframe)
+                            
+                            if ew == True: 
+                                lw = lw + 1
+                                
+                        # Put predictions back on original data frame
+                        # And convert y_pred so it can be added to dataframe
+                        # Put predictions back on original data frame
+                        # And convert y_pred so it can be added to dataframe
+                        
+                        sframe = df
+                        predf = predf[~predf.index.duplicated()]
+                        sframe['signal'] = predf
+                        sframe['signal'] = sframe['signal'].shift(1)
+                        sframe['return'] = asset['dayret']
+                        
+                        # Create the strategy return performance
+                        for i in range(len(sframe.index)):
+                            if sframe.loc[sframe.index[i], "signal"] > 0:
+                                sframe.loc[sframe.index[i], "strat"] = sframe.loc[sframe.index[i], "return"]*1
+                            else:
+                                sframe.loc[sframe.index[i], "strat"] = sframe.loc[sframe.index[i], "return"]*0
+                                
+                        bmk_series = sframe.loc[:,"return"].tail(len(sframe)-(lw+pw))
+                        strat_series = sframe.loc[:,"strat"].tail(len(sframe)-(lw+pw))
+                        
+                        #tsheet = pf.create_simple_tear_sheet(returns = strat_series, benchmark_rets=bmk_series)
             
-            predf = pd.DataFrame(columns = ["pred"])
+                        #pf.create_simple_tear_sheet(returns = strat_series, benchmark_rets=bmk_series)
             
-            # Create rolling/expanding window trainset
-            for i in range((lw+pw), len(df.index)-1):
-                print(i)
-                print(lw)
-                
-                if alg == "xg":
-                    model = GradientBoostingRegressor(n_estimators = nest,
-                                                      max_depth=mdepth,
-                                                      random_state=2)
-                elif alg == "linreg":
-                    print("linreg")
-                    model = LinearRegression()
-                
-                # Make trainsets
-                xtrain = df.loc[df.index[i-(lw+pw)]:df.index[i-pw],features]
-                ytrain = df.loc[df.index[i-(lw+pw)]:df.index[i-pw],['pwret']]
-                    
-                # Make testsets
-                xtest = df.loc[[df.index[i+1]],features]    
-                ytest = df.loc[[df.index[i+1]],['pwret']]
-                type(ytest)
-                    
-                model.fit(xtrain, ytrain)
-                y_pred = model.predict(xtest)
-                    
-                #results = pd.DataFrame(data = )
-                    
-                lframe = pd.DataFrame(y_pred, columns = ["pred"], index = ytest.index)
-                predf = predf.append(lframe)
-                
-                if expanding_window == True: 
-                    lw = lw + 1
-                
+                        # Real-time forward week prediction
+                        #rtpred = asset.loc[[asset.index[len(asset)-1]], ['sma_rat', 'vol_rat', 'p2h']]
+                        #model.predict(rtpred)
+                        sframe = sframe.dropna()
+                        # Evaluate the test set RMSE
+                        #MSE(sframe.loc[:,"pwret"], sframe.loc[:,"signal"])**(1/2)
+                        
+                        # Performance Data Frame
+                        # Add accuracy: correct observations divided by all observations
+                        
+                        perf = pd.DataFrame({
+                            'Date Run': datetime.today().strftime('%Y-%m-%d'),
+                            'Backtest_id':backtest_id,
+                            'Ticker': ticker,
+                            'algo': alg,
+                            'Prediction Window': [pw],
+                            'Lookback Window': [lw],
+                            'Number of Estimators': nest,
+                            'Max Depth': mdepth,
+                            'Annualized Return': ep.cagr(strat_series),
+                            'Benchmark Annualized Return': ep.cagr(bmk_series),
+                            'Active Annualized Return': ep.cagr(strat_series)-ep.cagr(bmk_series),
+                            'Cumulative Returns': ep.cum_returns_final(strat_series)*100,
+                            'Sharpe Ratio': ep.sharpe_ratio(strat_series),
+                            'Benchmark Sharpe Ratio': ep.sharpe_ratio(bmk_series),
+                            'Sortino Ratio': ep.sortino_ratio(strat_series),
+                            'Max Drawdown': ep.max_drawdown(strat_series),
+                            'Mean Squared Error': MSE(sframe.loc[:,"pwret"], sframe.loc[:,"signal"])**(1/2)
+                            #'Baseline': (sframe.loc[:,"pwret_bin"] == 1).sum()/len(sframe),
+                            #'Accuracy': accuracy_score(sframe.loc[:,"pwret_bin"], sframe.loc[:,"signal_bin"]),
+                            #'Skill': accuracy_score(sframe.loc[:,"pwret_bin"], sframe.loc[:,"signal_bin"])-(sframe.loc[:,"pwret_bin"] == 1).sum()/len(sframe)
+                        })
             
-                
-            # Put predictions back on original data frame
-            # And convert y_pred so it can be added to dataframe
-            # Put predictions back on original data frame
-            # And convert y_pred so it can be added to dataframe
-            
-            sframe = df
-            predf = predf[~predf.index.duplicated()]
-            sframe['signal'] = predf
-            sframe['signal'] = sframe['signal'].shift(1)
-            sframe['return'] = asset['dayret']
-            
-            # Create the strategy return performance
-            for i in range(len(sframe.index)):
-                if sframe.loc[sframe.index[i], "signal"] > 0:
-                    sframe.loc[sframe.index[i], "strat"] = sframe.loc[sframe.index[i], "return"]*1
-                else:
-                    sframe.loc[sframe.index[i], "strat"] = sframe.loc[sframe.index[i], "return"]*0
-                    
-            bmk_series = sframe.loc[:,"return"].tail(len(sframe)-(lw+pw))
-            strat_series = sframe.loc[:,"strat"].tail(len(sframe)-(lw+pw))
-            
-            #tsheet = pf.create_simple_tear_sheet(returns = strat_series, benchmark_rets=bmk_series)
-
-            pf.create_simple_tear_sheet(returns = strat_series, benchmark_rets=bmk_series)
-            
-            # Real-time forward week prediction
-            #rtpred = asset.loc[[asset.index[len(asset)-1]], ['sma_rat', 'vol_rat', 'p2h']]
-            #model.predict(rtpred)
-            sframe = sframe.dropna()
-            # Evaluate the test set RMSE
-            #MSE(sframe.loc[:,"pwret"], sframe.loc[:,"signal"])**(1/2)
-            
-            
-            # Performance Data Frame
-            perf = pd.DataFrame({
-                'Date Run': datetime.today().strftime('%Y-%m-%d'),
-                'Backtest_id':backtest_id,
-                'Ticker': ticker,
-                'algo': alg,
-                'Prediction Window': [pw],
-                'Lookback Window': [lw],
-                'Number of Estimators': nest,
-                'Max Depth': mdepth,
-                'Annualized Return': ep.cagr(strat_series),
-                'Benchmark Annualized Return': ep.cagr(bmk_series),
-                'Active Annualized Return': ep.cagr(strat_series)-ep.cagr(bmk_series),
-                'Cumulative Returns': ep.cum_returns_final(strat_series)*100,
-                'Sharpe Ratio': ep.sharpe_ratio(strat_series),
-                'Benchmark Sharpe Ratio': ep.sharpe_ratio(bmk_series),
-                'Sortino Ratio': ep.sortino_ratio(strat_series),
-                'Max Drawdown': ep.max_drawdown(strat_series),
-                'Mean Squared Error': MSE(sframe.loc[:,"pwret"], sframe.loc[:,"signal"])**(1/2)
-                #'Baseline': (sframe.loc[:,"pwret_bin"] == 1).sum()/len(sframe),
-                #'Accuracy': accuracy_score(sframe.loc[:,"pwret_bin"], sframe.loc[:,"signal_bin"]),
-                #'Skill': accuracy_score(sframe.loc[:,"pwret_bin"], sframe.loc[:,"signal_bin"])-(sframe.loc[:,"pwret_bin"] == 1).sum()/len(sframe)
-            })
-
-            # Save Summary Statistics to CSV
-            if path.exists('/home/brian/Documents/projects/MLPA/Summary' + "/" + "MLPA_backtest_summary.csv") == True:
-                perf.to_csv('/home/brian/Documents/projects/MLPA/Summary' + "/" + "MLPA_backtest_summary.csv", mode = 'a', header = False)
-            elif path.exists('/home/brian/Documents/projects/MLPA/Summary' + "/" + "MLPA_backtest_summary.csv") == False:
-                perf.to_csv('/home/brian/Documents/projects/MLPA/Summary' + "/" + "MLPA_backtest_summary.csv", header = True)
-             
-            # Save last relevant model 
-            with open("/home/bstaverosky/Documents/projects/MLPA/models/" + backtest_id + datetime.today().strftime('%Y-%m-%d') + "model.pkl", 'wb') as file:
-                pickle.dump(model, file)
-                
-            # Save Backtest Time Series
-            if path.exists('/home/brian/Documents/projects/MLPA/backtests/backtest_ts_' + backtest_id + ".csv") == True:
-                strat_series.to_csv('/home/brian/Documents/projects/MLPA/backtests/backtest_ts_' + backtest_id + ".csv", mode = 'a', header = False)
-            elif path.exists('/home/brian/Documents/projects/MLPA/backtests/backtest_ts_' + backtest_id + ".csv") == False:
-                strat_series.to_csv('/home/brian/Documents/projects/MLPA/backtests/backtest_ts_' + backtest_id + ".csv", header = True)
-
-
-    
+                        # Save Summary Statistics to CSV
+                        if path.exists('/home/bstaverosky/Documents/projects/MLPA/summary' + "/" + "MLPA_backtest_summary.csv") == True:
+                            perf.to_csv('/home/bstaverosky/Documents/projects/MLPA/summary' + "/" + "MLPA_backtest_summary.csv", mode = 'a', header = False)
+                        elif path.exists('/home/bstaverosky/Documents/projects/MLPA/summary' + "/" + "MLPA_backtest_summary.csv") == False:
+                            perf.to_csv('/home/bstaverosky/Documents/projects/MLPA/summary' + "/" + "MLPA_backtest_summary.csv", header = True)
+                         
+                        # Save last relevant model 
+                        with open("/home/bstaverosky/Documents/projects/MLPA/models/" + backtest_id + datetime.today().strftime('%Y-%m-%d') + "model.pkl", 'wb') as file:
+                            pickle.dump(model, file)
+                            
+                        # Save Backtest Time Series
+                        if path.exists('/home/bstaverosky/Documents/projects/MLPA/backtests/backtest_ts_' + backtest_id + ".csv") == True:
+                            strat_series.to_csv('/home/bstaverosky/Documents/projects/MLPA/backtests/backtest_ts_' + backtest_id + ".csv", mode = 'a', header = False)
+                        elif path.exists('/home/bstaverosky/Documents/projects/MLPA/backtests/backtest_ts_' + backtest_id + ".csv") == False:
+                            strat_series.to_csv('/home/bstaverosky/Documents/projects/MLPA/backtests/backtest_ts_' + backtest_id + ".csv", header = True)
 
 
 
