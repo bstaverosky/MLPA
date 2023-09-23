@@ -20,7 +20,7 @@ Created on Wed Jul  5 21:15:52 2023
 # 2. Earnings Yield
 # 3. Dividend Yield
 
-from datetime import datetime
+from datetime import date
 import urllib.request
 import yfinance as yf
 import pandas as pd
@@ -70,7 +70,7 @@ shiller.columns = cnames
 
 bonds = {"^TYX", "^TNX", "^IRX"}
 start_date = "1900-01-01"
-end_date = "2022-01-01"
+end_date = date.today()
 outlist = {}
 
 for b in bonds:
@@ -91,20 +91,17 @@ def convert_to_last_day_of_month(date_str):
 
 shiller = shiller.dropna(subset=['Date'])
 shiller['Date'] = shiller['Date'].astype(str)
-shiller['Date'].apply(convert_to_last_day_of_month) 
-
 
 shiller['Date'] = shiller['Date'].apply(convert_to_last_day_of_month)
 shiller['Date'] = pd.to_datetime(shiller['Date'])
-
 
 shiller.set_index("Date", inplace=True)
 
 mdata = shiller.merge(byields, left_index = True, right_index=True, how="left")
 mdata = mdata.fillna(method = "ffill")
 
+mdata["TMS"] = mdata['^TYX'] - mdata['^TNX']
+mdata['TMS2'] = mdata['^TYX'] - mdata['^IRX']
 
-
-
-
+mdata.to_pickle("/home/bstaverosky/Documents/projects/MLPA/shiller_factors.pkl")
 
