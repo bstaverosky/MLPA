@@ -129,11 +129,9 @@
                             #######
                             # FIGURE OUT WHY THIS IS HERE
                             #######
-                            #df = df.tail(len(df)-lw)
-                            
-                            #df = asset[['sma_rat', 'vol_rat', 'p2h', 'infl', 'ey', 'dy', 'ts', 'pwret']].tail(len(asset)-lw)
+
                             df = df.dropna()
-                            #features = ['sma_rat', 'vol_rat', 'p2h', 'infl', 'ey', 'dy', 'aaa', 'tr', 'pb','ts']
+
                             features = ['S&P_Comp_P', 'Dividend_D', 'Earnings_E', 'Consumer_Price_Index_CPI',
                                         'Date_Fraction', 'Long_Interest_Rate_GS10', 'Real_Price',
                                         'Real_Dividend', 'Real_Total_Return_Price', 'Real_Earnings',
@@ -144,7 +142,11 @@
                                         'Real_10_Year_Excess_Annualized_Returns', '^IRX', '^TNX', '^TYX', 'TMS',
                                         'TMS2','sma_rat', 'stvol', 'ltvol', 'vol_rat', 'p2h']
                             
+                            ### Technical Features Only ###
+                            
                             predf = pd.DataFrame(columns = ["pred"])
+                            
+                            fi_list = []
                             
                             # Create rolling/expanding window trainset
                             for i in range((lw+pw), len(df.index)-1):
@@ -170,8 +172,11 @@
                                     
                                 model.fit(xtrain, ytrain)
                                 y_pred = model.predict(xtest)
-                                    
-                                #results = pd.DataFrame(data = )
+                                
+                                fi_list.append(pd.DataFrame({
+                                    'Feature': features,
+                                    'Importance': model.feature_importances_
+                                }))
                                     
                                 lframe = pd.DataFrame(y_pred, columns = ["pred"], index = ytest.index)
                                 predf = predf.append(lframe)
@@ -183,6 +188,37 @@
                             # And convert y_pred so it can be added to dataframe
                             # Put predictions back on original data frame
                             # And convert y_pred so it can be added to dataframe
+                            
+                            combined_df = pd.concat(fi_list, ignore_index=True)
+                            combined_df = pd.concat(fi_list, axis=1)
+                            combined_df2 = pd.concat([fi_list[0]] + [df.iloc[:, 1] for df in fi_list[1:]], axis=1)
+                            
+                            test = combined_df2.T
+                            
+                            # Set the first row as the header
+                            test.columns = test.iloc[0]
+
+                            # Drop the first row as it's now the header
+                            test = test.drop(test.index[0])
+                            
+                            # Optionally, reset the index if you want to have a continuous integer index
+                            test = test.reset_index(drop=True)
+
+                            # Plot using the plot method
+                            ax = test.plot(kind='line', title='Yearly Sales', grid=True, legend=True)
+                            ax.legend(loc='center left', bbox_to_anchor=(1, 0.5))
+                            plt.tight_layout()
+
+                            # Display the plot
+                            plt.show()  
+                            
+                            # Compute the mean for all columns
+                            column_means = test.mean()
+
+                            # Sort the means in descending order
+                            sorted_means = column_means.sort_values(ascending=False)
+                            
+                            
                             
                             sframe = df
                             predf = predf[~predf.index.duplicated()]
@@ -260,6 +296,14 @@
                             ### ADHOC FEATURE IMPORTANCE CHECK ###
                             # Assuming you've trained a model called 'model' and have a list of feature names 'feature_names'
                             feature_importance = model.feature_importances_
+                            
+                            feature_importances_df = pd.DataFrame({
+                                'Feature': features,
+                                'Importance': model.feature_importances_
+                            })
+                            
+                            
+                            
                             sorted_idx = np.argsort(feature_importance)
                             plt.barh(range(len(sorted_idx)), feature_importance[sorted_idx], align='center')
                             plt.yticks(range(len(sorted_idx)), np.array(features)[sorted_idx])
