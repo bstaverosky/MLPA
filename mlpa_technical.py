@@ -32,9 +32,11 @@ import uuid
 import pickle
 import empyrical as ep
 from os import path
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense
 
 # Load SPY
-ticker = "^GSPC"
+ticker = "SPY"
 asset = yf.download(ticker, start='1900-01-01', progress=True)
 
 # Calculate signals
@@ -67,11 +69,12 @@ maxdepth = [1,2,3,5]
 predwindow = [3,5,10,21,63,126,256]
 #lookback window
 lookbacks = [256, 512, 768, 1280, 1920, 2560, 3840]
-#pw = 10
-#lw = 1920
-#est = 5
-#mdepth = 5
-#alg = "xg"
+pw = 256
+lw = 3840
+est = 2
+mdepth = 1
+alg = "nnet"
+nest = 3
 
 ### READ IN BACKTEST PARAMETERS ALREADY RUN ###
 
@@ -168,6 +171,7 @@ while next_params:
     # Create rolling/expanding window trainset
     for i in range((lw+pw), len(df.index)-1):
         print(i)
+        print(len(df.index))
         print(lw)
         
         if alg == "xg":
@@ -177,7 +181,24 @@ while next_params:
         elif alg == "linreg":
             print("linreg")
             model = LinearRegression()
-        
+            
+        elif alg == "nnet":
+            print("nnet")
+            # Create a sequential model
+            model = Sequential()
+            
+            # Add an input layer and hidden layer with 10 neurons
+            model.add(Dense(10, input_shape=(5,), activation="relu"))
+            
+            # Add a 1-neuron output layer
+            model.add(Dense(1))
+            
+            # Compile your model
+            model.compile(optimizer = 'adam', loss = 'mse', run_eagerly=True)
+            
+            # Train the model
+            print("Training the neural net...")
+                    
         # Make trainsets
         xtrain = df.loc[df.index[i-(lw+pw)]:df.index[i-pw],features]
         ytrain = df.loc[df.index[i-(lw+pw)]:df.index[i-pw],['pwret']]
@@ -186,14 +207,25 @@ while next_params:
         xtest = df.loc[[df.index[i+1]],features]    
         ytest = df.loc[[df.index[i+1]],['pwret']]
         type(ytest)
+        
+        if alg == "nnet":
+            model.fit(xtrain, ytrain, epochs = 30)
+        elif alg != "nnet":
+            model.fit(xtrain, ytrain)
             
-        model.fit(xtrain, ytrain)
         y_pred = model.predict(xtest)
         
-        fi_list.append(pd.DataFrame({
-            'Feature': features,
-            'Importance': model.feature_importances_
-        }))
+        ### WRITE PREDICTION TO DISK FOR RECALL ###
+        
+        predictions = {'Date': xtest.index.date,
+                       'prediction': [y_pred]}
+        
+        predictions = pd.DataFrame(predictions)
+        
+        # fi_list.append(pd.DataFrame({
+        #     'Feature': features,
+        #     'Importance': model.feature_importances_
+        # }))
             
         lframe = pd.DataFrame(y_pred, columns = ["pred"], index = ytest.index)
         predf = predf.append(lframe)
@@ -270,7 +302,7 @@ while next_params:
     
     #tsheet = pf.create_simple_tear_sheet(returns = strat_series, benchmark_rets=bmk_series)
 
-    #pf.create_simple_tear_sheet(returns = strat_series, benchmark_rets=bmk_series)
+    pf.create_simple_tear_sheet(returns = strat_series, benchmark_rets=bmk_series)
 
     # Real-time forward week prediction
     #rtpred = asset.loc[[asset.index[len(asset)-1]], ['sma_rat', 'vol_rat', 'p2h']]
@@ -340,7 +372,7 @@ while next_params:
         'Up Market Accuracy': tp / (tp + fn),
         'Down Market Accuracy': tn / (tn + fp),
         'Top 20% Up Market Accuracy': sig_up_days['signal_bin'].sum()/len(sig_up_days),
-        'Bottom 20% Down Market Accuracy': sig_down_days['signal_bin'].sum()/len(sig_down_days)    
+        'Bottom 20% Down Market Accuracy': (sig_down_days['signal_bin']==0).sum()/len(sig_down_days)    
     })
 
     # Save Summary Statistics to CSV
